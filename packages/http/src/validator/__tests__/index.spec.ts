@@ -423,3 +423,49 @@ describe('validateMediaType()', () => {
     });
   });
 });
+
+describe('reserved header parameters (OAS 3: Accept, Content-Type, Authorization are ignored)', () => {
+  beforeEach(() => jest.restoreAllMocks());
+
+  const headerParam = (name: string) => ({
+    id: name,
+    name,
+    style: HttpParamStyles.Simple as const,
+    required: true,
+    schema: { type: 'string' as const, enum: ['only-this-value'] },
+  });
+
+  it.each(['Accept', 'content-type', 'AUTHORIZATION'])('does not validate a %s header parameter', name => {
+    const result = validator.validateInput({
+      resource: {
+        method: 'get',
+        path: '/',
+        id: '1',
+        request: { headers: [headerParam(name)] },
+        responses: [{ id: '200', code: '200' }],
+      },
+      element: {
+        method: 'get',
+        url: { path: '/', query: {} },
+        headers: { accept: 'application/json', 'content-type': 'text/plain', authorization: 'Bearer x' },
+      },
+    });
+
+    assertRight(result);
+  });
+
+  it('still validates other header parameters', () => {
+    const result = validator.validateInput({
+      resource: {
+        method: 'get',
+        path: '/',
+        id: '1',
+        request: { headers: [headerParam('x-custom')] },
+        responses: [{ id: '200', code: '200' }],
+      },
+      element: { method: 'get', url: { path: '/', query: {} }, headers: { 'x-custom': 'nope' } },
+    });
+
+    assertLeft(result, error => expect(error).toHaveLength(1));
+  });
+});

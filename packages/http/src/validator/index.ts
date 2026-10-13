@@ -115,6 +115,14 @@ const validateInputBody = (
     )
   );
 
+// OpenAPI 3.x: header parameters named Accept, Content-Type or Authorization SHALL be ignored.
+// They are governed by content negotiation, request body media types and security schemes instead.
+// https://spec.openapis.org/oas/v3.1.0#fixed-fields-9
+const RESERVED_HEADER_PARAM_NAMES = ['accept', 'content-type', 'authorization'];
+
+const withoutReservedHeaderParams = <T extends { name: string }>(headers: T[]): T[] =>
+  headers.filter(header => !RESERVED_HEADER_PARAM_NAMES.includes(header.name.toLowerCase()));
+
 export const validateInput: ValidatorFn<IHttpOperation, IHttpRequest> = ({ resource, element }) => {
   const { request } = resource;
   const { body } = element;
@@ -128,7 +136,12 @@ export const validateInput: ValidatorFn<IHttpOperation, IHttpRequest> = ({ resou
         sequenceValidation(
           validateInputBody(O.fromNullable(request.body), bundle, body, element.headers || {}),
           request.headers
-            ? validateHeaders(element.headers || {}, request.headers, ValidationContext.Input, bundle)
+            ? validateHeaders(
+                element.headers || {},
+                withoutReservedHeaderParams(request.headers),
+                ValidationContext.Input,
+                bundle
+              )
             : E.right(undefined),
           request.query
             ? validateQuery(element.url.query || {}, request.query, ValidationContext.Input, bundle)
