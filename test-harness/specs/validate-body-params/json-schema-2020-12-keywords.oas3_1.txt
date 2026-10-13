@@ -1,0 +1,35 @@
+====test====
+When an OAS 3.1 request body violates JSON Schema 2020-12 keywords (prefixItems, const)
+without declaring $schema, return 422
+====spec====
+openapi: '3.1.0'
+paths:
+  /path:
+    post:
+      responses:
+        200:
+          content:
+            text/plain:
+              example: ok
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                point:
+                  type: array
+                  prefixItems:
+                    - type: number
+                    - type: string
+                kind:
+                  const: pet
+====server====
+mock -p 4010 ${document}
+====command====
+curl -i -X POST http://localhost:4010/path -H "Content-Type: application/json" --data '{ "point": ["a", 1], "kind": "cat" }'
+====expect====
+HTTP/1.1 422 Unprocessable Entity
+content-type: application/problem+json
+
+{"type":"https://stoplight.io/prism/errors#UNPROCESSABLE_ENTITY","title":"Invalid request","status":422,"detail":"Your request is not valid and no HTTP validation response was found in the spec, so Prism is generating this error for you.","validation":[{"location":["body","point","0"],"severity":"Error","code":"type","message":"Request body property point.0 must be number"},{"location":["body","point","1"],"severity":"Error","code":"type","message":"Request body property point.1 must be string"},{"location":["body","kind"],"severity":"Error","code":"const","message":"Request body property kind must be equal to constant"}]}

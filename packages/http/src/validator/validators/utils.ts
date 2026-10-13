@@ -57,6 +57,9 @@ const ajvInstances = {
 
 const JSON_SCHEMA_DRAFT_2019_09 = /^https?:\/\/json-schema.org\/draft\/2019-09\/schema#?$/;
 const JSON_SCHEMA_DRAFT_2020_12 = /^https?:\/\/json-schema.org\/draft\/2020-12\/schema#?$/;
+// The OAS 3.1 base dialect is JSON Schema 2020-12 plus the OAS vocabulary (discriminator, xml, ...).
+const OAS_3_1_DIALECT = /^https?:\/\/spec.openapis.org\/oas\/3.1\/dialect\/base#?$/;
+const JSON_SCHEMA_DRAFT_2020_12_URI = 'https://json-schema.org/draft/2020-12/schema';
 
 function assignAjvInstance($schema: string, coerce: boolean): AjvCore {
   const member = coerce ? 'coerce' : 'noCoerce';
@@ -64,11 +67,19 @@ function assignAjvInstance($schema: string, coerce: boolean): AjvCore {
 
   if (JSON_SCHEMA_DRAFT_2019_09.test($schema)) {
     draft = 'draft2019_09';
-  } else if (JSON_SCHEMA_DRAFT_2020_12.test($schema)) {
+  } else if (JSON_SCHEMA_DRAFT_2020_12.test($schema) || OAS_3_1_DIALECT.test($schema)) {
     draft = 'draft2020_12';
   }
 
   return ajvInstances[draft][member];
+}
+
+// Ajv refuses to compile a schema whose $schema it has no meta-schema for, which would make
+// validation silently pass. Point the OAS dialect at the 2020-12 meta-schema it extends.
+function normalizeDialect(schema: JSONSchema): JSONSchema {
+  return typeof schema.$schema === 'string' && OAS_3_1_DIALECT.test(schema.$schema)
+    ? { ...schema, $schema: JSON_SCHEMA_DRAFT_2020_12_URI }
+    : schema;
 }
 
 export const convertAjvErrors = (
@@ -118,7 +129,7 @@ function getValidationFunction(ajvInstance: AjvCore, schema: JSONSchema, bundle?
   }
 
   const validationFunction = ajvInstance.compile({
-    ...schema,
+    ...normalizeDialect(schema),
     __bundled__: bundle,
   });
 

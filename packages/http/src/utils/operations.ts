@@ -24,7 +24,7 @@ export async function getHttpOperationsFromSpec(specFilePathOrObject: string | o
 
   let operations: IHttpOperation[] = [];
   if (isOpenAPI2(result)) operations = transformOas2Operations(result);
-  else if (isOpenAPI3(result)) operations = transformOas3Operations(result);
+  else if (isOpenAPI3(result)) operations = transformOas3Operations(withDefaultJsonSchemaDialect(result));
   else if (isPostmanCollection(result)) operations = transformPostmanCollectionOperations(result);
   else throw new Error('Unsupported document format');
 
@@ -40,6 +40,18 @@ export async function getHttpOperationsFromSpec(specFilePathOrObject: string | o
   });
 
   return operations;
+}
+
+// OAS 3.1 schemas are JSON Schema 2020-12 by default (the OAS base dialect). http-spec only
+// honours an explicit `jsonSchemaDialect` and otherwise stamps every schema with draft-07,
+// which makes the validator pick the draft-07 Ajv instance and silently ignore 2020-12
+// keywords such as prefixItems, $defs, unevaluatedProperties or $dynamicRef.
+export const DEFAULT_OAS31_JSON_SCHEMA_DIALECT = 'https://json-schema.org/draft/2020-12/schema';
+
+function withDefaultJsonSchemaDialect(document: OpenAPIObject): OpenAPIObject {
+  if (!/^3\.1(\.|$)/.test(String(document.openapi))) return document;
+  if (typeof get(document, 'jsonSchemaDialect') === 'string') return document;
+  return { ...document, jsonSchemaDialect: DEFAULT_OAS31_JSON_SCHEMA_DIALECT };
 }
 
 function isOpenAPI2(document: unknown): document is Spec {
