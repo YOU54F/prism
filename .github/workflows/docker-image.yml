@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - master
+      - main
     tags:
       - 'v*'
   release:
@@ -16,7 +16,7 @@ env:
   # The name of the Docker image to be built and pushed to GHCR
   # The image name is derived from the GitHub repository name and the GitHub Container Registry (GHCR) URL.
   # The image name will be in the format: ghcr.io/<owner>/<repo>
-  GHCR_IMAGE: ghcr.io/ascheret/prism
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
 
 permissions:
   # Global permissions for the workflow, which can be overridden at the job level
@@ -41,22 +41,8 @@ jobs:
       # The build job will run for each platform in the matrix.
 
     permissions:
-      # Permissions for the build job, which can be overridden at the step level
-      # The permissions are set to allow the job to write to the GitHub Container Registry (GHCR) and read from the repository.
-      attestations: write
-      actions: read
-      checks: write
-      contents: write
-      deployments: none
-      id-token: write
-      issues: read
-      discussions: read
+      contents: read
       packages: write
-      pages: none
-      pull-requests: read
-      repository-projects: read
-      security-events: read
-      statuses: read
 
     runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' || matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' }}
     # The job runs on different runners based on the platform.
@@ -170,20 +156,8 @@ jobs:
     name: Merge Docker manifests
     runs-on: ubuntu-latest
     permissions:
-      attestations: write
-      actions: read
-      checks: read
       contents: read
-      deployments: none
-      id-token: write
-      issues: read
-      discussions: read
       packages: write
-      pages: none
-      pull-requests: read
-      repository-projects: read
-      security-events: read
-      statuses: read
 
     needs:
       - build
