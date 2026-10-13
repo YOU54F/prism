@@ -84,6 +84,36 @@ describe('GET /pet?__server', () => {
   }
 });
 
+describe('Invalid JSON request body', () => {
+  let server: ThenArg<ReturnType<typeof instantiatePrism>>;
+
+  beforeAll(async () => {
+    server = await instantiatePrism(resolve(__dirname, 'fixtures', 'petstore.no-auth.oas3.yaml'));
+  });
+
+  afterAll(() => server.close());
+
+  // https://github.com/stoplightio/prism/issues/2664
+  it('responds with a 400 problem+json payload instead of hanging', async () => {
+    const response = await fetch(new URL('/pets', server.address), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '[',
+      timeout: 5000,
+    } as RequestInit);
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('content-type')).toBe('application/problem+json');
+    const payload = await response.text();
+    checkErrorPayloadShape(payload);
+    expect(JSON.parse(payload)).toMatchObject({
+      type: 'https://stoplight.io/prism/errors#INVALID_JSON',
+      status: 400,
+      detail: 'Invalid JSON',
+    });
+  });
+});
+
 describe('Prefer header overrides', () => {
   let server: ThenArg<ReturnType<typeof instantiatePrism>>;
 
