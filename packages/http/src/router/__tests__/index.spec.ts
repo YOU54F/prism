@@ -537,6 +537,27 @@ describe('http router', () => {
         });
       });
 
+      test('should include an Allow header listing the methods of the matched path (#1929)', () => {
+        const path = randomPath({ includeTemplates: false });
+        const url = 'concrete.com';
+        const servers = [{ id: faker.word.sample(), url }];
+
+        assertLeft(
+          route({
+            resources: [
+              createResource('get', path, servers),
+              createResource('put', path, servers),
+              createResource('get', path + '/other', servers),
+            ],
+            input: { method: 'post', url: { baseUrl: url, path } },
+          }),
+          error => {
+            expect(error).toHaveProperty('status', 405);
+            expect(error).toHaveProperty('additional.headers.Allow', 'GET, PUT');
+          }
+        );
+      });
+
       test('should not match when the method does not exist', () => {
         const method: HttpMethod = 'get';
         const path = randomPath({ includeTemplates: false });
