@@ -1,0 +1,31 @@
+openapi: 3.2.0
+info: { title: OAS 3.2 smoke, version: 1.0.0 }
+paths:
+  /search:
+    query:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [term]
+              properties:
+                term: { type: string }
+      responses:
+        '200':
+          description: results
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string }
+              example: [a, b]
+    additionalOperations:
+      COPY:
+        responses:
+          '201':
+            description: copied
+            content:
+              application/json:
+                example: { copied: true }

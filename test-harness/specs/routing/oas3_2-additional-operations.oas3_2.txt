@@ -1,0 +1,35 @@
+====test====
+Given an OpenAPI 3.2 document with a custom method in `additionalOperations`,
+when I send a request with that method,
+then Prism routes it and returns the example response.
+====spec====
+openapi: 3.2.0
+info:
+  title: OAS 3.2 additionalOperations
+  version: 1.0.0
+paths:
+  /files/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    additionalOperations:
+      COPY:
+        responses:
+          '201':
+            description: copied
+            content:
+              application/json:
+                example:
+                  copied: true
+====server====
+mock -p 4010 ${document}
+====command====
+curl -i -X COPY http://localhost:4010/files/a.txt
+====expect====
+HTTP/1.1 201 Created
+content-type: application/json
+
+{"copied":true}
