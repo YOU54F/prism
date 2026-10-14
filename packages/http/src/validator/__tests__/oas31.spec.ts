@@ -66,6 +66,11 @@ describe('OAS 3.1 schema validation', () => {
       'openapi 3.1.0 with the OAS base jsonSchemaDialect',
       buildDocument('3.1.0', { jsonSchemaDialect: 'https://spec.openapis.org/oas/3.1/dialect/base' }),
     ],
+    ['openapi 3.2.0 without jsonSchemaDialect', buildDocument('3.2.0')],
+    [
+      'openapi 3.2.0 with the OAS 3.2 jsonSchemaDialect',
+      buildDocument('3.2.0', { jsonSchemaDialect: 'https://spec.openapis.org/oas/3.2/dialect/2025-09-17' }),
+    ],
   ])('%s', (_, document) => {
     let operation: IHttpOperation;
 
