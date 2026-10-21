@@ -84,17 +84,38 @@ export const createServer = (operations: IHttpOperation[], opts: IPrismHttpServe
   const handler: MicriHandler = async (request, reply) => {
     const { url, method, headers } = request;
 
-    const body = await parseRequestBody(request).catch(async e => {
+    let body: unknown;
+    try {
+      body = await parseRequestBody(request);
+    } catch (e) {
       // Drain the request body so the client can receive our error response before connection close.
       // Node.js 24 resets the TCP connection if there is unread data in the socket when the response is sent.
-      await new Promise<void>(resolve => {
-        request.resume();
-        request.once('end', resolve);
-        request.once('close', resolve);
-        request.once('error', resolve);
-      });
-      throw e;
-    });
+      // When the body has already been fully read (e.g. it was read but failed to parse as JSON) the 'end' event
+      // has already fired, so waiting for it would hang the request forever.
+      if (!request.readableEnded && !request.destroyed) {
+        await new Promise<void>(resolve => {
+          request.once('end', resolve);
+          request.once('close', resolve);
+          request.once('error', resolve);
+          request.resume();
+        });
+      }
+
+      const error = e as Error & { statusCode?: number; code?: string };
+      const problem = ProblemJsonError.fromTemplate(
+        {
+          type: error.code ? error.code.toUpperCase() : 'INVALID_REQUEST_BODY',
+          title: 'Unable to read the request body',
+          status: error.statusCode && error.statusCode >= 400 && error.statusCode < 500 ? error.statusCode : 400,
+        },
+        error.message
+      );
+
+      reply.setHeader('content-type', 'application/problem+json');
+      send(reply, problem.status, JSON.stringify(ProblemJsonError.toProblemJson(problem)));
+      components.logger.error({ name: 'HTTP SERVER' }, `Request terminated with error: ${problem}`);
+      return;
+    }
 
     const { searchParams, pathname } = new URL(
       url!, // url can't be empty for HTTP request

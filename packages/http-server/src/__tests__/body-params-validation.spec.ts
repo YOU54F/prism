@@ -654,11 +654,11 @@ describe('body params validation', () => {
             });
 
             expect(response.status).toBe(413);
+            expect(response.headers.get('content-type')).toBe('application/problem+json');
             return expect(response.json()).resolves.toMatchObject({
-              error: {
-                code: 'request_entity_too_large',
-                message: 'Body exceeded 10mb limit',
-              },
+              type: 'https://stoplight.io/prism/errors#REQUEST_ENTITY_TOO_LARGE',
+              status: 413,
+              detail: 'Body exceeded 10mb limit',
             });
           });
         });
