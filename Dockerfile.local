@@ -1,0 +1,84 @@
+# syntax=docker/dockerfile:1
+#
+# Optional build secret "ca": a full PEM bundle (public roots + a TLS-intercepting proxy root) used only
+# while npm talks to the registry. It is mounted per RUN step and never stored in a layer:
+#   docker build --secret id=ca,src=/path/to/ca-bundle.pem -t prism-beta:petstore-inc -f Dockerfile.local .
+#
+# Dependency lifecycle scripts are never run (npm ci --ignore-scripts).
+# vendor/ holds an unreleased @stoplight/http-spec build that is overlaid on the registry copy.
+
+FROM node:24 AS compiler
+
+WORKDIR /usr/src/prism
+
+COPY package.json package-lock.json .npmrc /usr/src/prism/
+COPY packages/ /usr/src/prism/packages/
+COPY vendor/ /usr/src/prism/vendor/
+
+RUN --mount=type=secret,id=ca,required=false \
+    if [ -s /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
+    npm ci --ignore-scripts && sh vendor/overlay-http-spec.sh . && npm run build
+
+###############################################################
+FROM node:24 AS dependencies
+
+WORKDIR /usr/src/prism/
+
+COPY package.json package-lock.json .npmrc /usr/src/prism/
+RUN mkdir -p /usr/src/prism/node_modules
+
+COPY packages/core/package.json /usr/src/prism/packages/core/
+RUN mkdir -p /usr/src/prism/packages/core/node_modules
+
+COPY packages/http/package.json /usr/src/prism/packages/http/
+RUN mkdir -p /usr/src/prism/packages/http/node_modules
+
+COPY packages/http-server/package.json /usr/src/prism/packages/http-server/
+RUN mkdir -p /usr/src/prism/packages/http-server/node_modules
+
+COPY packages/cli/package.json /usr/src/prism/packages/cli/
+RUN mkdir -p /usr/src/prism/packages/cli/node_modules
+
+COPY vendor/ /usr/src/prism/vendor/
+
+ENV NODE_ENV=production
+RUN --mount=type=secret,id=ca,required=false \
+    if [ -s /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
+    npm ci --omit=dev --ignore-scripts && sh vendor/overlay-http-spec.sh .
+
+###############################################################
+FROM node:24-alpine
+
+# https://github.com/nodejs/docker-node/blob/main/docs/BestPractices.md#handling-kernel-signals
+RUN --mount=type=secret,id=ca,target=/etc/ssl/certs/ca-certificates.crt,required=false \
+    apk add --no-cache tini
+
+WORKDIR /usr/src/prism
+ENV NODE_ENV=production
+
+COPY package.json /usr/src/prism/
+COPY packages/core/package.json /usr/src/prism/packages/core/
+COPY packages/http/package.json /usr/src/prism/packages/http/
+COPY packages/http-server/package.json /usr/src/prism/packages/http-server/
+COPY packages/cli/package.json /usr/src/prism/packages/cli/
+
+COPY --from=compiler /usr/src/prism/packages/core/dist /usr/src/prism/packages/core/dist
+COPY --from=compiler /usr/src/prism/packages/http/dist /usr/src/prism/packages/http/dist
+COPY --from=compiler /usr/src/prism/packages/http-server/dist /usr/src/prism/packages/http-server/dist
+COPY --from=compiler /usr/src/prism/packages/cli/dist /usr/src/prism/packages/cli/dist
+
+COPY --from=dependencies /usr/src/prism/node_modules/ /usr/src/prism/node_modules/
+COPY --from=dependencies /usr/src/prism/packages/core/node_modules/ /usr/src/prism/packages/core/node_modules/
+COPY --from=dependencies /usr/src/prism/packages/http/node_modules/ /usr/src/prism/packages/http/node_modules/
+COPY --from=dependencies /usr/src/prism/packages/http-server/node_modules/ /usr/src/prism/packages/http-server/node_modules/
+COPY --from=dependencies /usr/src/prism/packages/cli/node_modules/ /usr/src/prism/packages/cli/node_modules/
+
+WORKDIR /usr/src/prism/packages/cli/
+
+# No `npm link` step: npm workspaces already symlink node_modules/@stoplight/prism-* to packages/*,
+# and `npm link` re-reifies the tree from the registry, which would undo the vendored http-spec overlay.
+RUN node -e "const v=require('/usr/src/prism/node_modules/@stoplight/http-spec/package.json').version; if(!v.includes('oas32')) throw new Error('vendored http-spec missing: '+v); console.log('http-spec', v)"
+
+EXPOSE 4010
+
+ENTRYPOINT [ "/sbin/tini", "--", "node", "dist/index.js" ]
