@@ -83,10 +83,14 @@ const validateInputBody = (
         ? parseMIMEHeader(contentTypeHeader)
         : [undefined, undefined];
 
-      const contentLength = parseInt(headers.get('content-length')) || 0;
+      const contentLengthHeader = headers.get('content-length');
+      const contentLength = parseInt(contentLengthHeader) || 0;
       if (contentLength === 0) {
-        // generously allow this content type if there isn't a body actually provided
-        return E.right([requestBody, body, mediaType, multipartBoundary] as const);
+        // generously allow this content type if there isn't a body actually provided.
+        // Only an explicit `content-length: 0` means the body is empty: without the header (chunked requests,
+        // in-process calls) the body must still be validated.
+        const providedBody = contentLengthHeader === undefined ? body : (O.none as O.Option<unknown>);
+        return E.right([requestBody, providedBody, mediaType, multipartBoundary] as const);
       }
 
       let errorMessage = 'No supported content types, but request included a non-empty body';
