@@ -57,8 +57,9 @@ const ajvInstances = {
 
 const JSON_SCHEMA_DRAFT_2019_09 = /^https?:\/\/json-schema.org\/draft\/2019-09\/schema#?$/;
 const JSON_SCHEMA_DRAFT_2020_12 = /^https?:\/\/json-schema.org\/draft\/2020-12\/schema#?$/;
-// The OAS 3.1 base dialect is JSON Schema 2020-12 plus the OAS vocabulary (discriminator, xml, ...).
-const OAS_3_1_DIALECT = /^https?:\/\/spec.openapis.org\/oas\/3.1\/dialect\/base#?$/;
+// The OAS 3.1 / 3.2 base dialects are JSON Schema 2020-12 plus the OAS vocabulary (discriminator, xml, ...).
+// 3.1: https://spec.openapis.org/oas/3.1/dialect/base, 3.2: https://spec.openapis.org/oas/3.2/dialect/2025-09-17
+const OAS_3_1_DIALECT = /^https?:\/\/spec\.openapis\.org\/oas\/3\.[12]\/dialect\/[\w-]+#?$/;
 const JSON_SCHEMA_DRAFT_2020_12_URI = 'https://json-schema.org/draft/2020-12/schema';
 
 function assignAjvInstance($schema: string, coerce: boolean): AjvCore {
