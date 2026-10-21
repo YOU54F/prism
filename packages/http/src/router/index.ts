@@ -4,6 +4,7 @@ import * as E from 'fp-ts/Either';
 import * as A from 'fp-ts/Array';
 import * as O from 'fp-ts/Ord';
 import { pipe } from 'fp-ts/function';
+import { uniq } from 'lodash';
 import { IHttpConfig, IHttpRequest, ProblemJsonError } from '../types';
 import {
   NO_METHOD_MATCHED_ERROR,
@@ -122,7 +123,15 @@ const route: IPrismComponents<IHttpOperation, IHttpRequest, unknown, IHttpConfig
         return E.left(
           ProblemJsonError.fromTemplate(
             NO_METHOD_MATCHED_ERROR,
-            `The route ${requestPath} has been matched, but it does not have "${input.method}" method defined`
+            `The route ${requestPath} has been matched, but it does not have "${input.method}" method defined`,
+            // RFC 9110 15.5.6: a 405 response MUST include an Allow header listing the supported methods
+            {
+              headers: {
+                Allow: uniq(pathMatches.map(match => match.resource.method.toUpperCase()))
+                  .sort()
+                  .join(', '),
+              },
+            }
           )
         );
       }
