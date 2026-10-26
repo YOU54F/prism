@@ -1,0 +1,37 @@
+====test====
+Given an OpenAPI 3.2 document with a `query` operation,
+when I send a QUERY request with a valid body,
+then Prism routes it and returns the example response.
+====spec====
+openapi: 3.2.0
+info:
+  title: OAS 3.2 query
+  version: 1.0.0
+paths:
+  /search:
+    query:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [term]
+              properties:
+                term:
+                  type: string
+      responses:
+        '200':
+          description: results
+          content:
+            application/json:
+              example: ["a", "b"]
+====server====
+mock -p 4010 ${document}
+====command====
+curl -i -X QUERY http://localhost:4010/search -H "Content-Type: application/json" --data '{"term":"x"}'
+====expect====
+HTTP/1.1 200 OK
+content-type: application/json
+
+["a","b"]
