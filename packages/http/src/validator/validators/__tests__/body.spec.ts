@@ -1,6 +1,6 @@
 import { HttpParamStyles, IMediaTypeContent } from '@stoplight/types';
 import { JSONSchema } from '../../..';
-import { validate, findContentByMediaTypeOrFirst, decodeUriEntities } from '../body';
+import { validate, findContentByMediaTypeOrFirst, decodeUriEntities, parseMultipartFormDataParams } from '../body';
 import { assertRight, assertLeft, assertSome } from '@stoplight/prism-core/src/__tests__/utils';
 import { ValidationContext } from '../types';
 import { faker } from '@faker-js/faker/locale/en';
@@ -294,5 +294,37 @@ describe('decodeUriEntities', () => {
     };
     const results = decodeUriEntities(target, 'application/x-www-form-urlencoded');
     expect(results).toEqual({ 'profile-Image': target['profile%2DImage'] });
+  });
+});
+
+describe('parseMultipartFormDataParams()', () => {
+  const boundary = 'X-BOUNDARY';
+
+  it('parses well formed parts', () => {
+    const body = [`--${boundary}`, 'Content-Disposition: form-data; name="a"', '', 'b', `--${boundary}--`, ''].join(
+      '\r\n'
+    );
+
+    assertRight(parseMultipartFormDataParams(body, boundary), result => expect(result).toEqual({ a: 'b' }));
+  });
+
+  // https://github.com/stoplightio/prism/issues/2672
+  it('returns a validation error instead of throwing when a part is malformed', () => {
+    const body = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="{"inputBy" :  true}";type=application/json"',
+      '',
+      'x',
+      `--${boundary}--`,
+      '',
+    ].join('\r\n');
+
+    expect(() => parseMultipartFormDataParams(body, boundary)).not.toThrow();
+    assertLeft(parseMultipartFormDataParams(body, boundary), errors =>
+      expect(errors[0]).toMatchObject({
+        code: 400,
+        message: expect.stringContaining('Unable to parse the multipart/form-data request body'),
+      })
+    );
   });
 });

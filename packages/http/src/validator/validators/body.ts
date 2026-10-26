@@ -118,13 +118,22 @@ export function parseMultipartFormDataParams(
   }
   // the parse-multipart-data package requires that the body is passed in as a buffer, not a string
   const bufferBody = Buffer.from(target, 'utf-8');
-  const parts = multipart.parse(bufferBody, multipartBoundary);
 
-  return E.right(
-    parts.reduce((result: Dictionary<string>, pair: any) => {
-      result[pair['name']] = pair['data'].toString();
-      return result;
-    }, {})
+  // parse-multipart-data throws on malformed part headers (e.g. a Content-Disposition without a name),
+  // which used to crash the whole Prism process. Turn such failures into a validation error instead.
+  return E.tryCatch(
+    () =>
+      multipart.parse(bufferBody, multipartBoundary).reduce((result: Dictionary<string>, pair: any) => {
+        result[pair['name']] = pair['data'].toString();
+        return result;
+      }, {}),
+    (e): NonEmptyArray<IPrismDiagnostic> => [
+      {
+        message: `Unable to parse the multipart/form-data request body: ${e instanceof Error ? e.message : String(e)}`,
+        code: 400,
+        severity: DiagnosticSeverity.Error,
+      },
+    ]
   );
 }
 
