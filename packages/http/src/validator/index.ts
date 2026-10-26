@@ -115,6 +115,24 @@ const validateInputBody = (
     )
   );
 
+// OpenAPI 3.x: header parameters named Accept, Content-Type or Authorization SHALL be ignored.
+// They are governed by content negotiation, request body media types and security schemes instead.
+// https://spec.openapis.org/oas/v3.1.0#fixed-fields-9
+const RESERVED_HEADER_PARAM_NAMES = ['accept', 'content-type', 'authorization'];
+
+// Memoised per spec array: the header validator caches its compiled schema by array identity, so returning a new
+// array on every request would compile (and retain) a fresh Ajv validator per request.
+const filteredHeaderParams = new WeakMap<object[], object[]>();
+
+const withoutReservedHeaderParams = <T extends { name: string }>(headers: T[]): T[] => {
+  let filtered = filteredHeaderParams.get(headers) as T[] | undefined;
+  if (!filtered) {
+    filtered = headers.filter(header => !RESERVED_HEADER_PARAM_NAMES.includes(header.name.toLowerCase()));
+    filteredHeaderParams.set(headers, filtered);
+  }
+  return filtered;
+};
+
 export const validateInput: ValidatorFn<IHttpOperation, IHttpRequest> = ({ resource, element }) => {
   const { request } = resource;
   const { body } = element;
@@ -128,7 +146,12 @@ export const validateInput: ValidatorFn<IHttpOperation, IHttpRequest> = ({ resou
         sequenceValidation(
           validateInputBody(O.fromNullable(request.body), bundle, body, element.headers || {}),
           request.headers
-            ? validateHeaders(element.headers || {}, request.headers, ValidationContext.Input, bundle)
+            ? validateHeaders(
+                element.headers || {},
+                withoutReservedHeaderParams(request.headers),
+                ValidationContext.Input,
+                bundle
+              )
             : E.right(undefined),
           request.query
             ? validateQuery(element.url.query || {}, request.query, ValidationContext.Input, bundle)
