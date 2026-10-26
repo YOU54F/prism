@@ -8,8 +8,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-node@v6
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
       with:
         node-version-file: .nvmrc
         cache: 'npm'
@@ -36,8 +36,8 @@ jobs:
     - uses: maxim-lobanov/setup-xcode@v1.7.0
       with:
         xcode-version: latest-stable
-    - uses: actions/checkout@v6
-    - uses: actions/setup-node@v6
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
       with:
         node-version-file: .nvmrc
         cache: 'npm'
@@ -83,8 +83,8 @@ jobs:
       executor: docker-harness
       install_manually: true
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-node@v6
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
       with:
         node-version-file: .nvmrc
         cache: 'npm'

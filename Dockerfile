@@ -1,3 +1,17 @@
+# syntax=docker/dockerfile:1
+#
+# Optional build secret "ca": a full PEM bundle (public roots + a TLS-intercepting proxy root), used only while
+# fetching packages and never stored in a layer:
+#   docker build --secret id=ca,src=/path/to/ca-bundle.pem -t prism .
+# Dependency lifecycle scripts are not run (npm ci --ignore-scripts); Prism has no native dependencies.
+
+FROM golang:1-alpine AS nodeprune
+
+RUN --mount=type=secret,id=ca,required=false \
+    if [ -s /run/secrets/ca ]; then export SSL_CERT_FILE=/run/secrets/ca; fi; \
+    go install -trimpath -ldflags "-s -w" github.com/tj/node-prune@v1.2.0
+
+###############################################################
 FROM node:24 AS compiler
 
 WORKDIR /usr/src/prism
@@ -5,12 +19,16 @@ WORKDIR /usr/src/prism
 COPY package.json package-lock.json /usr/src/prism/
 COPY packages/ /usr/src/prism/packages/
 
-RUN npm ci && npm run build
+RUN --mount=type=secret,id=ca,required=false \
+    if [ -s /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
+    npm ci --ignore-scripts && npm run build
 
 ###############################################################
 FROM node:24 AS dependencies
 
 WORKDIR /usr/src/prism/
+
+COPY --from=nodeprune /go/bin/node-prune /bin/
 
 COPY package.json package-lock.json /usr/src/prism/
 RUN mkdir -p /usr/src/prism/node_modules
@@ -27,21 +45,22 @@ RUN mkdir -p /usr/src/prism/packages/http-server/node_modules
 COPY packages/cli/package.json /usr/src/prism/packages/cli/
 RUN mkdir -p /usr/src/prism/packages/cli/node_modules
 
-ENV NODE_ENV production
-RUN npm ci --omit=dev
+ENV NODE_ENV=production
+RUN --mount=type=secret,id=ca,required=false \
+    if [ -s /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
+    npm ci --omit=dev --ignore-scripts
 
-RUN if [ $(uname -m) != "aarch64" ]; then curl -sfL https://gobinaries.com/tj/node-prune | bash; fi
-RUN if [ $(uname -m) != "aarch64" ]; then node-prune; fi
+RUN node-prune
 
 ###############################################################
 FROM node:24-alpine
 
 # https://github.com/nodejs/docker-node/blob/main/docs/BestPractices.md#handling-kernel-signals
-RUN apk add --no-cache tini
+RUN --mount=type=secret,id=ca,target=/etc/ssl/certs/ca-certificates.crt,required=false \
+    apk add --no-cache tini
 
 WORKDIR /usr/src/prism
-ARG BUILD_TYPE=development
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 COPY package.json /usr/src/prism/
 COPY packages/core/package.json /usr/src/prism/packages/core/
@@ -62,12 +81,8 @@ COPY --from=dependencies /usr/src/prism/packages/cli/node_modules/ /usr/src/pris
 
 WORKDIR /usr/src/prism/packages/cli/
 
-RUN if [ "$BUILD_TYPE" = "development" ] ; then \
-    cd /usr/src/prism/packages/core && npm link && \
-    cd /usr/src/prism/packages/http && npm link @stoplight/prism-core && npm link && \
-    cd /usr/src/prism/packages/http-server && npm link @stoplight/prism-core && npm link @stoplight/prism-http && npm link && \
-    cd /usr/src/prism/packages/cli && npm link @stoplight/prism-core && npm link @stoplight/prism-http && npm link @stoplight/prism-http-server && npm link ; \
-fi
+# No `npm link` step: npm workspaces already symlink node_modules/@stoplight/prism-* to packages/*, and
+# `npm link` re-reifies the tree against the registry, which needs network access (and the CA) in the final stage.
 
 EXPOSE 4010
 
